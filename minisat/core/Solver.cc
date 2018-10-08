@@ -101,6 +101,7 @@ Solver::Solver() :
   , conflict_budget    (-1)
   , propagation_budget (-1)
   , asynch_interrupt   (false)
+  , nogc (false)
 {}
 
 
@@ -128,6 +129,7 @@ Var Solver::newVar(lbool upol, bool dvar)
     watches  .init(mkLit(v, false));
     watches  .init(mkLit(v, true ));
     assigns  .insert(v, l_Undef);
+    lvl0assigns.insert(v, l_Undef);
     vardata  .insert(v, mkVarData(CRef_Undef, 0));
     activity .insert(v, rnd_init_act ? drand(random_seed) * 0.00001 : 0);
     seen     .insert(v, 0);
@@ -135,6 +137,8 @@ Var Solver::newVar(lbool upol, bool dvar)
     user_pol .insert(v, upol);
     decision .reserve(v);
     trail    .capacity(v+1);
+    lvl0trail.capacity(v+1);
+    old_trail.capacity(v+1);
     setDecisionVar(v, dvar);
     return v;
 }
@@ -144,7 +148,7 @@ Var Solver::newVar(lbool upol, bool dvar)
 // releases of the same variable).
 void Solver::releaseVar(Lit l)
 {
-    if (value(l) == l_Undef){
+    if (value(l) == l_Undef && old_trail.size() == 0){
         addClause(l);
         released_vars.push(var(l));
     }
@@ -192,6 +196,7 @@ void Solver::attachClause(CRef cr){
 
 
 void Solver::detachClause(CRef cr, bool strict){
+    nogc = false;
     const Clause& c = ca[cr];
     assert(c.size() > 1);
     
@@ -216,6 +221,7 @@ void Solver::removeClause(CRef cr) {
     if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
     c.mark(1); 
     ca.free(cr);
+    nogc = false;
 }
 
 
@@ -519,6 +525,10 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 {
     assert(value(p) == l_Undef);
     assigns[var(p)] = lbool(!sign(p));
+    if (decisionLevel() == 0) {
+        lvl0assigns[var(p)] = lbool(!sign(p));
+        lvl0trail.push_(p);
+    }
     vardata[var(p)] = mkVarData(from, decisionLevel());
     trail.push_(p);
 }
@@ -710,7 +720,8 @@ bool Solver::simplify()
     }
     checkGarbage();
     rebuildOrderHeap();
-
+    nogc = false;
+    
     simpDB_assigns = nAssigns();
     simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
 
@@ -808,6 +819,31 @@ lbool Solver::search(int nof_conflicts)
                         uncheckedEnqueue(p);
                     }
                 }
+                if (nogc)  {
+                for (int i = 0; i < old_trail.size(); i++) {
+                    if (value(old_trail[i]) == l_Undef) {
+                        bool valid = true;
+                        CRef old_reason = vardata[var(old_trail[i])].reason;
+                        if (old_reason != CRef_Undef) {
+                            if (ca[old_reason][0] != old_trail[i] || value(old_trail[i]) == l_False) {
+                                valid = false;
+                            }
+                            else {
+                                for (int j = 1; j < ca[old_reason].size(); j++) {
+                                    if (value(ca[old_reason][j]) != l_False) {
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (valid) {
+                                uncheckedEnqueue(old_trail[i], old_reason);
+                            }
+                        }
+                    }
+                }
+                }
+                old_trail.clear();
             }
             else if (decisionLevel() > 0) {
 
@@ -915,7 +951,17 @@ lbool Solver::solve_()
         for (int i = 0; i < nVars(); i++) model[i] = value(i);
     }else if (status == l_False && conflict.size() == 0)
         ok = false;
-
+    
+    cancelUntil(1);
+    old_trail.clear();
+    if (decisionLevel() == 1) {
+        for (int i = trail_lim[0]; i < trail_lim[1]; i++) {
+            if (reason(var(trail[i])) != CRef_Undef) {
+                old_trail.push_(trail[i]);
+            }
+        }
+        nogc = true;
+    }
     cancelUntil(0);
     return status;
 }
@@ -1046,6 +1092,7 @@ void Solver::relocAll(ClauseAllocator& to)
 {
     // All watchers:
     //
+    nogc = false;
     watches.cleanAll();
     for (int v = 0; v < nVars(); v++)
         for (int s = 0; s < 2; s++){
@@ -1062,6 +1109,14 @@ void Solver::relocAll(ClauseAllocator& to)
 
         // Note: it is not safe to call 'locked()' on a relocated clause. This is why we keep
         // 'dangling' reasons here. It is safe and does not hurt.
+        if (reason(v) != CRef_Undef && (ca[reason(v)].reloced() || locked(ca[reason(v)]))){
+            assert(!isRemoved(reason(v)));
+            ca.reloc(vardata[v].reason, to);
+        }
+    }
+    
+    for (int i = 0; i < old_trail.size(); i++){
+        Var v = var(old_trail[i]);
         if (reason(v) != CRef_Undef && (ca[reason(v)].reloced() || locked(ca[reason(v)]))){
             assert(!isRemoved(reason(v)));
             ca.reloc(vardata[v].reason, to);
@@ -1100,4 +1155,5 @@ void Solver::garbageCollect()
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n", 
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
+    nogc = false;
 }

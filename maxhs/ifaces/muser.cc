@@ -193,8 +193,9 @@ vector<Lit> Muser::getForced(int index) {
 }
 
 void Muser::updateForced(vector<Lit>& frc) {
-  int limit = trail_lim.size() > 0 ?
-    trail_lim[0] : trail.size();
+  //int limit = trail_lim.size() > 0 ?
+  //  trail_lim[0] : trail.size();
+  int limit = lvl0trail.size();
   int i {0};
 
   //if(params.mverbosity>3)
@@ -205,15 +206,15 @@ void Muser::updateForced(vector<Lit>& frc) {
     i = frc.size() - 1;
     //if(params.mverbosity>3)
     //cout << "  frc.back() = " << frc.back() << "\n";
-    while(i < limit && trail[i++] != frc.back());
+    while(i < limit && lvl0trail[i++] != frc.back());
   }
 
   //if(params.mverbosity>3)
   //cout << " set i to " << i << "\n";
 
   for( ; i < limit; i++)
-    if(in2ex(trail[i]) != lit_Undef)
-      frc.push_back(trail[i]);
+    if(in2ex(lvl0trail[i]) != lit_Undef)
+      frc.push_back(lvl0trail[i]);
 }
 
 bool Muser::addClause(const vector<Lit>& lts) 
@@ -236,7 +237,7 @@ lbool Muser::curVal(Var x) const {
   if(in == var_Undef)
     return l_Undef;
   else  
-    return value(in);
+    return lvl0value(in);
 }
 
 lbool Muser::curVal(Lit x) const {
@@ -244,7 +245,7 @@ lbool Muser::curVal(Lit x) const {
   if(in == lit_Undef)
     return l_Undef;
   else  
-    return value(in);
+    return lvl0value(in);
 }
 
 void Muser::ensureSoftCls(vector<Lit>& conflict) {
@@ -424,7 +425,7 @@ void Muser::addMoreCrits(vector<Lit>& conflict, int64_t propBudget)
   satSolves++;
   //Note that clits don't go through the ex-to-in interface. They are internal variables only.
   for(auto lt : clits)
-    releaseVar(lt);
+      ;//releaseVar(lt);
 
   assumptions.shrink(assumptions.size() - aInitSize);
   size_t j {0}; //move lits detected to be critical into assumptions

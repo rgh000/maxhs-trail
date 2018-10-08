@@ -297,8 +297,9 @@ vector<Lit> miniSolver::getForced(int index) {
 }
 
 void miniSolver::updateForced(vector<Lit>& frc) {
-  int limit = trail_lim.size() > 0 ?
-    trail_lim[0] : trail.size();
+  //int limit = trail_lim.size() > 0 ?
+  //  trail_lim[0] : trail.size();
+  int limit = lvl0trail.size();
   int i {0};
 
   //DEBUG
@@ -309,12 +310,12 @@ void miniSolver::updateForced(vector<Lit>& frc) {
   
   if(frc.size() > 0) {
     i = frc.size() - 1;
-    while(i < limit && trail[i++] != frc.back());
+    while(i < limit && lvl0trail[i++] != frc.back());
   }
 
   for( ; i < limit; i++)
-    if(in2ex(trail[i]) != lit_Undef)
-      frc.push_back(trail[i]);
+    if(in2ex(lvl0trail[i]) != lit_Undef)
+      frc.push_back(lvl0trail[i]);
 }
 
 bool miniSolver::reduceClause(vector<Lit>& lts) const
@@ -471,7 +472,7 @@ lbool miniSolver::curVal(const Var x) const {
   if(in == var_Undef)
     return l_Undef;
   else  
-    return Minisat::SimpSolver::value(in);
+    return Minisat::SimpSolver::lvl0value(in);
 }
 
 lbool miniSolver::curVal(const Lit x) const {
@@ -479,7 +480,7 @@ lbool miniSolver::curVal(const Lit x) const {
   if(in == lit_Undef)
     return l_Undef;
   else  
-    return Minisat::SimpSolver::value(in);
+    return Minisat::SimpSolver::lvl0value(in);
 }
 
 vector<Lit> miniSolver::getIth_clauses(int ith) const {

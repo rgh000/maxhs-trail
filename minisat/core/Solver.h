@@ -94,6 +94,8 @@ public:
     //
     lbool   value      (Var x) const;       // The current value of a variable.
     lbool   value      (Lit p) const;       // The current value of a literal.
+    lbool   lvl0value  (Var x) const;
+    lbool   lvl0value  (Lit p) const;
     lbool   modelValue (Var x) const;       // The value of a variable in the last model. The last call to solve must have been satisfiable.
     lbool   modelValue (Lit p) const;       // The value of a literal in the last model. The last call to solve must have been satisfiable.
     int     nAssigns   ()      const;       // The current number of assigned literals.
@@ -187,11 +189,15 @@ protected:
 
     // Solver state:
     //
+    vec<Lit>            old_trail;
+    vec<Lit>            lvl0trail;
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
     vec<Lit>            trail;            // Assignment stack; stores all assigments made in the order they were made.
     vec<int>            trail_lim;        // Separator indices for different decision levels in 'trail'.
     vec<Lit>            assumptions;      // Current set of assumptions provided to solve by the user.
+    vec<Lit>            levelZeroUnits;
+    VMap<lbool>         lvl0assigns;
 
     VMap<double>        activity;         // A heuristic measurement of the activity of a variable.
     VMap<lbool>         assigns;          // The current assignments.
@@ -235,6 +241,7 @@ protected:
     int64_t             conflict_budget;    // -1 means no budget.
     int64_t             propagation_budget; // -1 means no budget.
     bool                asynch_interrupt;
+    bool                nogc;
 
     // Main internal methods:
     //
@@ -350,6 +357,8 @@ inline int      Solver::decisionLevel ()      const   { return trail_lim.size();
 inline uint32_t Solver::abstractLevel (Var x) const   { return 1 << (level(x) & 31); }
 inline lbool    Solver::value         (Var x) const   { return assigns[x]; }
 inline lbool    Solver::value         (Lit p) const   { return assigns[var(p)] ^ sign(p); }
+inline lbool    Solver::lvl0value     (Var x) const   { return lvl0assigns[x]; }
+inline lbool    Solver::lvl0value     (Lit p) const   { return lvl0assigns[var(p)] ^ sign(p); }
 inline lbool    Solver::modelValue    (Var x) const   { return model[x]; }
 inline lbool    Solver::modelValue    (Lit p) const   { return model[var(p)] ^ sign(p); }
 inline int      Solver::nAssigns      ()      const   { return trail.size(); }
